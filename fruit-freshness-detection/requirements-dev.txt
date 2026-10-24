@@ -1,0 +1,7 @@
+# Laptop / PC install (run the dashboard + evaluation tools):  pip install -r requirements-dev.txt
+-r requirements.txt
+ai-edge-litert      # TFLite runtime (alternative: tensorflow)
+bleak               # optional: BLE sensor link
+scikit-learn        # confusion matrix / classification report
+matplotlib          # figures
+seaborn             # confusion-matrix heatmap

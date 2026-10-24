@@ -1,0 +1,8 @@
+# Core dependencies for the dashboard server (app/server.py)
+flask>=3.0
+numpy>=1.26
+pillow>=10.0
+
+# You also need ONE TFLite runtime:
+#   Raspberry Pi 5 : pip install -r requirements-pi.txt     (ai-edge-litert)
+#   Laptop / PC    : pip install tensorflow

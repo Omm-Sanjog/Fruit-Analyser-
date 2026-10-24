@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fruit Freshness Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%8D%8F%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light;
+    --bg:#f4f4f2; --surface-1:#fcfcfb; --surface-2:#f0efec; --border:#e3e2de; --grid:#ebeae6;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#7a7975;
+    --accent:#2a78d6; --accent-ink:#fff;
+    --series-air:#2a78d6; --series-bat:#eb6834;
+    --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --fresh-fill:#15803d; --rotten-fill:#b91c1c; --unsure-fill:#6b7280;
+    --track:#ebeae6; --shadow:0 1px 2px rgba(0,0,0,.05); --scrim:rgba(20,20,19,.55);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg:#121211; --surface-1:#1a1a19; --surface-2:#232321; --border:#2e2e2b; --grid:#292927;
+      --text-primary:#fff; --text-secondary:#c3c2b7; --text-muted:#8f8e86;
+      --accent:#3987e5; --series-air:#3987e5; --series-bat:#d95926;
+      --track:#2e2e2b; --shadow:none; --scrim:rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:#121211; --surface-1:#1a1a19; --surface-2:#232321; --border:#2e2e2b; --grid:#292927;
+    --text-primary:#fff; --text-secondary:#c3c2b7; --text-muted:#8f8e86;
+    --accent:#3987e5; --series-air:#3987e5; --series-bat:#d95926;
+    --track:#2e2e2b; --shadow:none; --scrim:rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text-primary);
+         font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:20px 16px 40px; }
+  [hidden] { display:none !important; }
+
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; margin-bottom:16px; }
+  header h1 { font-size:22px; margin:0; flex:1 1 auto; letter-spacing:-.01em; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  button, .btn {
+    font:inherit; font-size:14px; font-weight:600; border-radius:10px; padding:9px 14px; cursor:pointer;
+    border:1px solid var(--border); background:var(--surface-1); color:var(--text-primary);
+    display:inline-flex; align-items:center; gap:6px; text-decoration:none;
+  }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  button.big { padding:12px 20px; font-size:15px; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  input[type=text], select {
+    font:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface-1); color:var(--text-primary); min-width:0;
+  }
+
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:6px 12px; border-radius:999px;
+          font-size:13px; font-weight:600; background:var(--surface-1); border:1px solid var(--border); color:var(--text-secondary); }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--text-muted); flex:none; }
+  .pill[data-state="ok"] .dot { background:var(--good); }
+  .pill[data-state="busy"] .dot { background:var(--warning); animation:pulse 1s infinite; }
+  .pill[data-state="demo"] .dot { background:var(--accent); }
+  .pill[data-state="err"] .dot { background:var(--critical); }
+  @keyframes pulse { 50% { opacity:.3; } }
+
+  .notice { background:var(--surface-1); border:1px solid var(--border); border-left:4px solid var(--serious);
+            border-radius:10px; padding:12px 14px; margin-bottom:16px; color:var(--text-secondary); font-size:14px; }
+  .notice b { color:var(--text-primary); }
+  code { font-size:.92em; background:var(--surface-2); padding:1px 5px; border-radius:4px; }
+
+  .card { background:var(--surface-1); border:1px solid var(--border); border-radius:14px; padding:16px;
+          box-shadow:var(--shadow); min-width:0; }
+  .card-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px; }
+  .card-head h2 { font-size:16px; margin:0; display:flex; align-items:center; gap:8px; }
+  .step { width:24px; height:24px; border-radius:50%; background:var(--accent); color:var(--accent-ink);
+          display:inline-grid; place-items:center; font-size:13px; font-weight:700; flex:none; }
+  .muted { color:var(--text-muted); font-size:13px; }
+
+  .top { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:12px; margin-bottom:12px; align-items:start; }
+  .stack { display:grid; gap:12px; margin-bottom:12px; }
+
+  /* Capture */
+  .tabs { display:inline-flex; background:var(--surface-2); border-radius:10px; padding:3px; gap:2px; }
+  .tabs button { border:0; background:transparent; padding:6px 12px; font-size:13px; border-radius:8px; color:var(--text-secondary); }
+  .tabs button[aria-selected="true"] { background:var(--surface-1); color:var(--text-primary); box-shadow:0 1px 2px rgba(0,0,0,.12); }
+  .viewer { position:relative; aspect-ratio:4/3; background:#0d0d0c; border-radius:12px; overflow:hidden; display:grid; place-items:center; }
+  .viewer video { width:100%; height:100%; object-fit:cover; }
+  .viewer .guide { position:absolute; inset:14%; border:2px dashed rgba(255,255,255,.55); border-radius:14px; pointer-events:none; }
+  .viewer .hint { position:absolute; color:#d8d7d2; font-size:14px; text-align:center; padding:16px; }
+  .drop { aspect-ratio:4/3; border:2px dashed var(--border); border-radius:12px; display:grid; place-items:center;
+          text-align:center; color:var(--text-secondary); cursor:pointer; padding:16px; background:var(--surface-2); }
+  .drop.over { border-color:var(--accent); color:var(--text-primary); }
+  .drop .big-ico { font-size:40px; line-height:1; margin-bottom:6px; }
+  .cap-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+  .cap-actions .spacer { flex:1; }
+
+  /* Sensor tiles */
+  .tiles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .tile { background:var(--surface-2); border-radius:12px; padding:12px; min-width:0; }
+  .tile .label { font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:4px; }
+  .tile .val { font-size:26px; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .tile .val small { font-size:13px; font-weight:600; color:var(--text-secondary); margin-left:3px; letter-spacing:0; }
+  .tile .sub { margin-top:6px; font-size:12px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  .badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--text-primary); margin-top:6px; }
+  .sw { width:10px; height:10px; border-radius:3px; background:var(--text-muted); flex:none; display:inline-block; }
+  .bar { height:7px; border-radius:4px; background:var(--track); margin-top:8px; overflow:hidden; }
+  .bar > div { height:100%; width:0; border-radius:4px; background:var(--good); transition:width .4s; }
+  .sensor-foot { margin-top:10px; font-size:12px; color:var(--text-muted); }
+
+  /* Preview */
+  .preview { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
+  .preview-img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:12px; background:var(--surface-2); display:block; }
+  .verdict { border-radius:14px; padding:18px; color:#fff; display:flex; gap:14px; align-items:center; }
+  .verdict .ico { width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,.2);
+                  display:grid; place-items:center; font-size:26px; font-weight:700; flex:none; }
+  .verdict .v-title { font-size:24px; font-weight:700; line-height:1.15; }
+  .verdict .v-sub { font-size:14px; opacity:.92; margin-top:2px; }
+  .verdict.fresh { background:var(--fresh-fill); } .verdict.rotten { background:var(--rotten-fill); }
+  .verdict.unsure, .verdict.loading { background:var(--unsure-fill); }
+  .section-title { font-size:13px; font-weight:700; color:var(--text-secondary); margin:16px 0 8px; }
+  .pred { display:grid; grid-template-columns:minmax(0,130px) minmax(0,1fr) 48px; gap:10px; align-items:center; font-size:13px; margin-bottom:6px; }
+  .pred .ptrack { height:10px; background:var(--track); border-radius:5px; overflow:hidden; }
+  .pred .pfill { height:100%; background:var(--accent); border-radius:5px; }
+  .pred .pv { text-align:right; font-variant-numeric:tabular-nums; color:var(--text-secondary); }
+  .kv { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .kv div { background:var(--surface-2); border-radius:10px; padding:8px 10px; font-size:13px; min-width:0; }
+  .kv span { display:block; color:var(--text-muted); font-size:12px; }
+  .kv b { font-variant-numeric:tabular-nums; }
+  .note-row { display:flex; gap:8px; margin-top:14px; }
+  .note-row input { flex:1; }
+  .prev-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+
+  /* Samples */
+  .samples { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; }
+  .sample { background:var(--surface-2); border-radius:12px; overflow:hidden; position:relative; }
+  .sample img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
+  .sample .s-body { padding:8px 10px 10px; font-size:13px; }
+  .sample .s-title { font-weight:700; display:flex; align-items:center; gap:6px; }
+  .sample .s-meta { color:var(--text-secondary); font-size:12px; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .sample .s-num { position:absolute; top:6px; left:6px; background:rgba(0,0,0,.6); color:#fff; font-size:12px; font-weight:700; border-radius:6px; padding:2px 7px; }
+  .sample .s-del { position:absolute; top:6px; right:6px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:6px; padding:2px 8px; font-size:13px; }
+  .empty { color:var(--text-muted); font-size:14px; padding:18px 4px; }
+
+  /* Charts */
+  .charts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .chart { position:relative; height:200px; }
+  .chart svg { display:block; width:100%; height:100%; overflow:visible; }
+  .chart .c-empty { position:absolute; inset:0; display:grid; place-items:center; color:var(--text-muted); font-size:13px; pointer-events:none; }
+  .tip { position:absolute; pointer-events:none; z-index:2; background:var(--surface-1); border:1px solid var(--border); border-radius:8px;
+         padding:6px 9px; font-size:12px; box-shadow:0 4px 12px rgba(0,0,0,.12); white-space:nowrap; font-variant-numeric:tabular-nums; display:none; }
+  .tip b { font-size:14px; } .tip .t { color:var(--text-muted); }
+
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--text-primary); color:var(--bg);
+           padding:10px 16px; border-radius:10px; font-size:14px; font-weight:600; z-index:50; opacity:0; transition:opacity .25s; pointer-events:none; }
+  .toast.show { opacity:1; }
+
+  /* Report view */
+  #reportView { position:fixed; inset:0; background:var(--scrim); z-index:40; overflow:auto; padding:16px; }
+  .r-toolbar { max-width:880px; margin:0 auto 12px; background:var(--surface-1); border:1px solid var(--border); border-radius:14px; padding:12px;
+               display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .r-toolbar input { flex:1 1 120px; }
+  .r-toolbar .spacer { flex:1 1 0; }
+
+  @media (max-width:900px) {
+    .top, .preview, .charts { grid-template-columns:minmax(0,1fr); }
+  }
+  @media (max-width:420px) {
+    .tile .val { font-size:22px; }
+    .kv { grid-template-columns:minmax(0,1fr); }
+    .pred { grid-template-columns:minmax(0,100px) minmax(0,1fr) 44px; }
+  }
+
+  @media print {
+    body { background:#fff; }
+    body > *:not(#reportView) { display:none !important; }
+    #reportView { position:static; background:#fff; padding:0; overflow:visible; }
+    .r-toolbar { display:none !important; }
+    .report { box-shadow:none !important; border:0 !important; max-width:none !important; margin:0 !important; }
+  }
+</style>
+<style id="reportCss">
+  .report { max-width:880px; margin:0 auto; background:#fff; color:#111; border-radius:6px; padding:36px 40px;
+            font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; box-shadow:0 10px 40px rgba(0,0,0,.25); }
+  .report h1 { font-size:24px; margin:0; letter-spacing:-.01em; }
+  .report h2 { font-size:15px; margin:26px 0 10px; padding-bottom:6px; border-bottom:2px solid #111; text-transform:uppercase; letter-spacing:.04em; }
+  .report .r-head { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; border-bottom:1px solid #ddd; padding-bottom:14px; }
+  .report .r-sub { color:#555; margin-top:4px; }
+  .report .r-id { text-align:right; font-size:13px; color:#444; }
+  .report .r-id b { color:#111; font-size:15px; }
+  .report .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
+  .report .meta div { background:#f4f4f2; border-radius:6px; padding:8px 10px; font-size:13px; }
+  .report .meta div > span { display:block; color:#666; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .report .rec { display:flex; gap:14px; align-items:center; border-radius:8px; padding:14px 16px; color:#fff; margin-top:4px; }
+  .report .rec .ri { width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.22); display:grid; place-items:center; font-weight:700; font-size:20px; flex:none; }
+  .report .rec b { font-size:18px; display:block; }
+  .report .rec.accept { background:#15803d; } .report .rec.review { background:#b45309; } .report .rec.reject { background:#b91c1c; } .report .rec.none { background:#6b7280; }
+  .report .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px; }
+  .report .stat { border:1px solid #e3e2de; border-radius:6px; padding:10px; }
+  .report .stat > span { display:block; color:#666; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .report .stat b { font-size:22px; font-variant-numeric:tabular-nums; }
+  .report table { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+  .report th, .report td { padding:7px 8px; border-bottom:1px solid #e6e5e1; text-align:right; }
+  .report th:first-child, .report td:first-child { text-align:left; }
+  .report th { color:#555; font-weight:600; font-size:12px; background:#f7f7f5; }
+  .report .tag { display:inline-flex; align-items:center; gap:5px; font-weight:600; }
+  .report .tag i { width:9px; height:9px; border-radius:2px; display:inline-block; font-style:normal; }
+  .report .gallery { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .report .g-item { border:1px solid #e3e2de; border-radius:8px; overflow:hidden; break-inside:avoid; page-break-inside:avoid; }
+  .report .g-item img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
+  .report .g-body { padding:8px 10px; font-size:12px; }
+  .report .g-body b { font-size:13px; }
+  .report .g-body .n { color:#666; }
+  .report .foot { margin-top:28px; padding-top:10px; border-top:1px solid #ddd; color:#777; font-size:11px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .report .sign { margin-top:30px; display:grid; grid-template-columns:1fr 1fr; gap:40px; font-size:12px; color:#555; }
+  .report .sign div { border-top:1px solid #999; padding-top:6px; }
+  @media (max-width:640px) {
+    .report { padding:20px 16px; }
+    .report .meta, .report .stats { grid-template-columns:repeat(2,1fr); }
+    .report .gallery { grid-template-columns:repeat(2,1fr); }
+    .report .r-head { flex-direction:column; } .report .r-id { text-align:left; }
+    .report .table-scroll { overflow-x:auto; }
+  }
+  @media print { .report .gallery { grid-template-columns:repeat(3,1fr); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🍏 Fruit Freshness Dashboard</h1>
+    <div class="controls">
+      <span class="pill" id="modelPill" data-state="busy"><span class="dot"></span><span>Model: checking…</span></span>
+      <span class="pill" id="sensorPill" data-state="idle"><span class="dot"></span><span>Sensor: not connected</span></span>
+      <button id="connectBtn">Connect sensor</button>
+      <button id="demoBtn" title="Fake sensor data for testing without the ESP32">Demo sensor</button>
+      <button id="themeBtn" aria-label="Toggle dark mode" title="Toggle dark mode">◐</button>
+    </div>
+  </header>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="top">
+    <!-- 1. Capture -->
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="step">1</span> Capture a fruit</h2>
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="camera">Camera</button>
+          <button role="tab" aria-selected="false" data-tab="upload">Upload</button>
+          <button role="tab" aria-selected="false" data-tab="pi" id="piTab" hidden>Pi camera</button>
+        </div>
+      </div>
+
+      <div data-pane="camera">
+        <div class="viewer">
+          <video id="video" autoplay playsinline muted hidden></video>
+          <div class="guide" id="guide" hidden></div>
+          <div class="hint" id="camHint">📷<br>Click <b>Start camera</b>, place one fruit inside the frame, then <b>Capture</b>.</div>
+        </div>
+        <div class="cap-actions">
+          <button id="camStart">Start camera</button>
+          <select id="camSelect" hidden aria-label="Choose camera"></select>
+          <span class="spacer"></span>
+          <button class="primary big" id="camCapture" disabled>📸 Capture &amp; analyse</button>
+        </div>
+      </div>
+
+      <div data-pane="upload" hidden>
+        <label class="drop" id="drop">
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <div><div class="big-ico">🖼️</div><b>Click to choose a photo</b><br><span class="muted">or drag and drop it here</span></div>
+        </label>
+      </div>
+
+      <div data-pane="pi" hidden>
+        <div class="drop" style="cursor:default">
+          <div><div class="big-ico">🎥</div><b>Raspberry Pi camera</b><br><span class="muted">Place the fruit under the Pi camera, then capture.</span></div>
+        </div>
+        <div class="cap-actions"><span class="spacer"></span><button class="primary big" id="piCapture">📸 Capture with Pi camera</button></div>
+      </div>
+    </div>
+
+    <!-- Live sensor -->
+    <div class="card">
+      <div class="card-head"><h2>Live sensor</h2><span class="muted" id="lastSeen">No data yet</span></div>
+      <div class="tiles">
+        <div class="tile">
+          <div class="label">Air quality</div>
+          <div class="val"><span id="ppm">–</span><small>ppm</small></div>
+          <div class="badge" id="airBadge"><span class="sw"></span><span>Waiting</span></div>
+        </div>
+        <div class="tile">
+          <div class="label">Battery</div>
+          <div class="val"><span id="batV">–</span><small>V</small></div>
+          <div class="sub" id="batPct">–</div>
+          <div class="bar"><div id="batBar"></div></div>
+        </div>
+        <div class="tile">
+          <div class="label">MQ135 sensor</div>
+          <div class="val"><span id="mqV">–</span><small>V</small></div>
+          <div class="sub">Rs <span id="rs">–</span> kΩ</div>
+          <div class="badge" id="warmBadge"></div>
+        </div>
+        <div class="tile">
+          <div class="label">Sensor uptime</div>
+          <div class="val"><span id="uptime">–</span></div>
+          <div class="sub">Readings: <span id="count">0</span></div>
+        </div>
+      </div>
+      <div class="sensor-foot" id="sensorFoot">Connect the ESP32 to include its readings with each capture.</div>
+    </div>
+  </section>
+
+  <!-- 2. Preview -->
+  <section class="card" id="previewCard" hidden style="margin-bottom:12px">
+    <div class="card-head"><h2><span class="step">2</span> Preview</h2><span class="muted" id="prevTime"></span></div>
+    <div class="preview">
+      <img class="preview-img" id="prevImg" alt="Captured fruit">
+      <div>
+        <div class="verdict loading" id="verdict">
+          <div class="ico">…</div><div><div class="v-title">Analysing…</div><div class="v-sub">Running the model</div></div>
+        </div>
+        <div id="prevDetails" hidden>
+          <div class="section-title">Top predictions</div>
+          <div id="preds"></div>
+          <div class="section-title">Readings at capture</div>
+          <div class="kv" id="prevSensor"></div>
+          <div class="note-row"><input type="text" id="noteInput" placeholder="Note (optional), e.g. shelf 3, bought Monday" maxlength="120"></div>
+          <div class="prev-actions">
+            <button class="primary big" id="addBtn">＋ Add to report</button>
+            <button id="retakeBtn">Retake</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Samples -->
+  <section class="card" style="margin-bottom:12px">
+    <div class="card-head">
+      <h2><span class="step">3</span> Samples <span class="muted" id="sampleCount">(0)</span></h2>
+      <div class="controls">
+        <button id="csvBtn" disabled>Download CSV</button>
+        <button id="clearBtn" disabled>Clear all</button>
+        <button class="primary" id="reportBtn" disabled>📄 Generate final report</button>
+      </div>
+    </div>
+    <div class="samples" id="samples"></div>
+    <div class="empty" id="samplesEmpty">No samples yet. Capture a fruit and click <b>Add to report</b>.</div>
+  </section>
+
+  <!-- Sensor charts -->
+  <section class="charts">
+    <div class="card">
+      <div class="card-head"><h2>Air quality, ppm</h2><span class="muted">last 5 min</span></div>
+      <div class="chart" id="airChart"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Battery voltage, V</h2><span class="muted">last 5 min</span></div>
+      <div class="chart" id="batChart"></div>
+    </div>
+  </section>
+</div>
+
+<!-- Final report -->
+<div id="reportView" hidden>
+  <div class="r-toolbar">
+    <button id="backBtn">← Back</button>
+    <input type="text" id="rBatch" placeholder="Batch / lot name">
+    <input type="text" id="rInspector" placeholder="Inspected by">
+    <input type="text" id="rLocation" placeholder="Location">
+    <span class="spacer"></span>
+    <button id="printBtn">🖨️ Print / Save PDF</button>
+    <button class="primary" id="saveHtmlBtn">⬇ Download report</button>
+  </div>
+  <article class="report" id="report"></article>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ================= Settings (must match the ESP32 sketch) =================
+const DEVICE_NAME  = "ESP32-AirSensor";
+const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const TX_UUID      = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const WINDOW_MS    = 5 * 60 * 1000;
+const SENSOR_FRESH_MS = 15000;          // readings older than this aren't attached to a capture
+const MAX_IMG      = 1024;              // photos are resized to this before upload
+
+// ================= State =================
+const $ = id => document.getElementById(id);
+const sensorHistory = [];
+let latest = null;                       // latest sensor reading {..., t}
+let samples = [];
+let current = null;                      // sample being previewed
+let serverInfo = null;
+let device = null, userDisconnect = false, demoTimer = null, serverPoll = null, lastServerUp = null;
+let stream = null;
+
+// ================= Small helpers =================
+const fmtTime = t => new Date(t).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", second:"2-digit" });
+const fmtDateTime = t => new Date(t).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
+const pct = p => `${(p * 100).toFixed(p >= 0.995 || p < 0.01 ? 0 : 1)}%`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const EMOJI = { Apple:"🍎", Banana:"🍌", Orange:"🍊" };
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
+function notice(html) { $("notice").innerHTML = html || ""; $("notice").hidden = !html; }
+function setPill(id, state, text) { const p = $(id); p.dataset.state = state; p.lastElementChild.textContent = text; }
+
+function airStatus(ppm) {
+  if (ppm == null || ppm < 0 || isNaN(ppm)) return { text:"No reading", color:"var(--text-muted)", hex:"#9a9994", icon:"–" };
+  if (ppm < 800)  return { text:"Good",      color:"var(--good)",     hex:"#0ca30c", icon:"✓" };
+  if (ppm < 1200) return { text:"Moderate",  color:"var(--warning)",  hex:"#fab219", icon:"!" };
+  if (ppm < 2000) return { text:"Poor",      color:"var(--serious)",  hex:"#ec835a", icon:"!!" };
+  return               { text:"Very poor", color:"var(--critical)", hex:"#d03b3b", icon:"✕" };
+}
+function stateStyle(state) {
+  if (state === "Fresh")  return { cls:"fresh",  icon:"✓", hex:"#15803d", word:"Fresh" };
+  if (state === "Rotten") return { cls:"rotten", icon:"✕", hex:"#b91c1c", word:"Rotten" };
+  return { cls:"unsure", icon:"?", hex:"#6b7280", word:"Uncertain" };
+}
+function fmtUptime(s) {
+  s = Math.max(0, s | 0);
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+// ================= Theme =================
+$("themeBtn").onclick = () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark";
+  drawCharts();
+};
+
+// ================= Server / model =================
+async function checkServer() {
+  if (location.protocol === "file:") {
+    setPill("modelPill", "err", "Model: offline");
+    notice("<b>Open this dashboard through the server.</b> Run <code>python server.py</code> in this folder, then open <b>http://localhost:5000</b>. Opening the file directly can't reach the fruit model.");
+    return;
+  }
+  try {
+    const r = await fetch("/api/info");
+    serverInfo = await r.json();
+    setPill("modelPill", "ok", "Model: ready");
+    $("piTab").hidden = !serverInfo.camera;
+    if (serverInfo.ble) startServerSensor();
+  } catch {
+    setPill("modelPill", "err", "Model: offline");
+    notice("<b>Can't reach the model server.</b> Make sure <code>python server.py</code> is running, then reload this page.");
+  }
+}
+
+// ================= Sensor: one handler for every source =================
+function handleReading(d) {
+  const r = { t: Date.now(), ppm:+d.ppm, mq_v:+d.mq_v, rs:+d.rs, bat_v:+d.bat_v, bat_pct:+d.bat_pct, warm:+d.warm, up:+d.up };
+  latest = r;
+  sensorHistory.push(r);
+  while (sensorHistory.length && sensorHistory[0].t < Date.now() - WINDOW_MS - 60000) sensorHistory.shift();
+
+  const st = airStatus(r.ppm);
+  $("ppm").textContent = r.ppm >= 0 ? Math.round(r.ppm) : "–";
+  $("airBadge").innerHTML = `<span class="sw" style="background:${st.color}"></span><span>${st.icon} ${st.text}</span>`;
+  $("batV").textContent = r.bat_v.toFixed(2);
+  $("batPct").textContent = `${r.bat_pct}% charge`;
+  $("batBar").style.width = Math.max(0, Math.min(100, r.bat_pct)) + "%";
+  $("batBar").style.background = r.bat_pct > 40 ? "var(--good)" : r.bat_pct > 15 ? "var(--warning)" : "var(--critical)";
+  $("mqV").textContent = r.mq_v.toFixed(2);
+  $("rs").textContent = r.rs >= 0 ? r.rs.toFixed(1) : "–";
+  $("warmBadge").innerHTML = r.warm
+    ? `<span class="sw" style="background:var(--good)"></span><span>✓ Warmed up</span>`
+    : `<span class="sw" style="background:var(--warning)"></span><span>⏳ Warming up</span>`;
+  $("uptime").textContent = fmtUptime(r.up);
+  $("count").textContent = Number($("count").textContent) + 1;
+  $("lastSeen").textContent = `Updated ${fmtTime(r.t)}`;
+  drawCharts();
+}
+function sensorSnapshot() {
+  if (!latest || Date.now() - latest.t > SENSOR_FRESH_MS) return null;
+  const { ppm, mq_v, rs, bat_v, bat_pct, warm, up } = latest;
+  return { ppm, mq_v, rs, bat_v, bat_pct, warm, up };
+}
+
+// --- Browser Bluetooth ---
+async function connectBle() {
+  if (!navigator.bluetooth) {
+    notice("<b>This browser can't use Bluetooth.</b> Use <b>Chrome</b> or <b>Edge</b> on Windows, Mac, Android or ChromeOS, or start the server with <code>python server.py --ble</code> on the Raspberry Pi so the Pi reads the sensor.");
+    return;
+  }
+  stopDemo();
+  try {
+    setPill("sensorPill", "busy", "Sensor: choose device…");
+    device = await navigator.bluetooth.requestDevice({ filters:[{ name:DEVICE_NAME }, { services:[SERVICE_UUID] }], optionalServices:[SERVICE_UUID] });
+    device.addEventListener("gattserverdisconnected", onBleDisconnected);
+    userDisconnect = false;
+    await openGatt();
+  } catch (err) {
+    setPill("sensorPill", "idle", "Sensor: not connected");
+    if (err.name !== "NotFoundError") notice(`<b>Couldn't connect to the sensor:</b> ${esc(err.message)}. Make sure the ESP32 is on and not connected to another device (stop <code>pi_receiver.py</code>).`);
+  }
+}
+async function openGatt() {
+  setPill("sensorPill", "busy", "Sensor: connecting…");
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(SERVICE_UUID);
+  const ch = await svc.getCharacteristic(TX_UUID);
+  ch.addEventListener("characteristicvaluechanged", e => {
+    const txt = new TextDecoder().decode(e.target.value).trim();
+    try { handleReading(JSON.parse(txt)); } catch { console.warn("Bad sensor message:", txt); }
+  });
+  await ch.startNotifications();
+  setPill("sensorPill", "ok", "Sensor: connected");
+  $("connectBtn").textContent = "Disconnect sensor";
+  $("sensorFoot").textContent = "Readings are attached to each capture automatically.";
+  notice("");
+}
+async function onBleDisconnected() {
+  $("connectBtn").textContent = "Connect sensor";
+  if (userDisconnect || !device) { setPill("sensorPill", "idle", "Sensor: not connected"); return; }
+  for (let i = 1; i <= 5; i++) {
+    setPill("sensorPill", "busy", `Sensor: reconnecting (${i}/5)…`);
+    await new Promise(r => setTimeout(r, 2000));
+    try { await openGatt(); return; } catch {}
+  }
+  setPill("sensorPill", "err", "Sensor: disconnected");
+}
+function disconnectBle() {
+  userDisconnect = true;
+  if (device && device.gatt.connected) device.gatt.disconnect();
+  setPill("sensorPill", "idle", "Sensor: not connected");
+  $("connectBtn").textContent = "Connect sensor";
+}
+$("connectBtn").onclick = () => (device && device.gatt.connected) ? disconnectBle() : connectBle();
+
+// --- Sensor read by the server (python server.py --ble) ---
+function startServerSensor() {
+  $("connectBtn").hidden = true;
+  $("sensorFoot").textContent = "The server is reading the ESP32 directly (--ble).";
+  setPill("sensorPill", "busy", "Sensor: via server, searching…");
+  serverPoll = setInterval(async () => {
+    try {
+      const s = await (await fetch("/api/sensor")).json();
+      if (s.connected && s.reading) {
+        setPill("sensorPill", "ok", "Sensor: connected (server)");
+        if (s.reading.up !== lastServerUp) { lastServerUp = s.reading.up; handleReading(s.reading); }
+      } else {
+        setPill("sensorPill", "busy", "Sensor: via server, searching…");
+      }
+    } catch { setPill("sensorPill", "err", "Sensor: server unreachable"); }
+  }, 2000);
+}
+
+// --- Demo sensor ---
+function stopDemo() {
+  if (!demoTimer) return;
+  clearInterval(demoTimer); demoTimer = null;
+  $("demoBtn").textContent = "Demo sensor";
+  setPill("sensorPill", "idle", "Sensor: not connected");
+}
+$("demoBtn").onclick = () => {
+  if (demoTimer) { stopDemo(); return; }
+  if (device && device.gatt.connected) disconnectBle();
+  let up = 0, ppm = 520, bat = 12.3;
+  const mk = () => { ppm = Math.max(380, ppm + (Math.random() - .45) * 25); bat += (Math.random() - .6) * 0.01; up += 2;
+    return { ppm, mq_v: 1.1 + ppm / 2500, rs: 3000 / ppm, bat_v: bat, bat_pct: Math.round((bat - 9) / 3.6 * 100), warm: up > 120 ? 1 : 0, up }; };
+  const start = Date.now() - 150000;
+  for (let i = 0; i < 75; i++) { const d = mk(); sensorHistory.push({ ...d, t: start + i * 2000 }); }
+  handleReading(mk());
+  demoTimer = setInterval(() => handleReading(mk()), 2000);
+  setPill("sensorPill", "demo", "Sensor: demo data");
+  $("demoBtn").textContent = "Stop demo";
+};
+
+// ================= Capture =================
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
+  document.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+  if (b.dataset.tab !== "camera") stopCamera();
+});
+
+async function startCamera(deviceId) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    notice("<b>The camera isn't available here.</b> Browsers only allow the camera on <b>http://localhost</b> or <b>https://</b> pages. Use the <b>Upload</b> tab instead (on a phone it can open the camera app).");
+    return;
+  }
+  stopCamera();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId:{ exact:deviceId } } : { facingMode:"environment", width:{ ideal:1280 }, height:{ ideal:960 } }, audio:false });
+    const v = $("video"); v.srcObject = stream; v.hidden = false; $("guide").hidden = false; $("camHint").hidden = true;
+    $("camCapture").disabled = false; $("camStart").textContent = "Stop camera";
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    const sel = $("camSelect");
+    if (cams.length > 1) {
+      const activeId = stream.getVideoTracks()[0].getSettings().deviceId;
+      sel.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}" ${c.deviceId === activeId ? "selected" : ""}>${esc(c.label || "Camera " + (i + 1))}</option>`).join("");
+      sel.hidden = false;
+    }
+  } catch (err) {
+    notice(`<b>Couldn't start the camera:</b> ${esc(err.message)}. Allow camera access in the browser, or use the Upload tab.`);
+  }
+}
+function stopCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  $("video").hidden = true; $("guide").hidden = true; $("camHint").hidden = false;
+  $("camCapture").disabled = true; $("camStart").textContent = "Start camera";
+}
+$("camStart").onclick = () => stream ? stopCamera() : startCamera();
+$("camSelect").onchange = e => startCamera(e.target.value);
+
+// Draw any image source into a canvas no bigger than MAX_IMG, return {blob, dataUrl}
+function toJpeg(source, w, h) {
+  const s = Math.min(1, MAX_IMG / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * s); c.height = Math.round(h * s);
+  c.getContext("2d").drawImage(source, 0, 0, c.width, c.height);
+  const dataUrl = c.toDataURL("image/jpeg", 0.9);
+  return new Promise(res => c.toBlob(blob => res({ blob, dataUrl }), "image/jpeg", 0.9));
+}
+
+$("camCapture").onclick = async () => {
+  const v = $("video");
+  if (!v.videoWidth) return;
+  analyse(await toJpeg(v, v.videoWidth, v.videoHeight));
+};
+
+async function useFile(file) {
+  if (!file || !file.type.startsWith("image/")) { toast("Please choose an image file"); return; }
+  const bmp = await createImageBitmap(file, { imageOrientation:"from-image" });
+  analyse(await toJpeg(bmp, bmp.width, bmp.height));
+}
+$("fileInput").onchange = e => { useFile(e.target.files[0]); e.target.value = ""; };
+const drop = $("drop");
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => useFile(e.dataTransfer.files[0]));
+
+$("piCapture").onclick = async () => {
+  const sensor = sensorSnapshot();
+  showPreviewLoading(null);
+  try {
+    const fd = new FormData();
+    if (sensor) fd.append("sensor", JSON.stringify(sensor));
+    const res = await fetch("/api/capture", { method:"POST", body:fd });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || res.statusText);
+    $("prevImg").src = out.image;
+    showResult({ img: out.image, result: out, sensor: out.sensor || sensor, t: Date.now() });
+  } catch (err) { showError(err.message); }
+};
+
+// ================= Analyse + preview =================
+function showPreviewLoading(imgUrl) {
+  const card = $("previewCard");
+  card.hidden = false;
+  if (imgUrl) $("prevImg").src = imgUrl; else $("prevImg").removeAttribute("src");
+  $("verdict").className = "verdict loading";
+  $("verdict").innerHTML = `<div class="ico">…</div><div><div class="v-title">Analysing…</div><div class="v-sub">Running the model</div></div>`;
+  $("prevDetails").hidden = true;
+  $("prevTime").textContent = "";
+  card.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+function showError(msg) {
+  $("verdict").className = "verdict unsure";
+  $("verdict").innerHTML = `<div class="ico">!</div><div><div class="v-title">Couldn't analyse</div><div class="v-sub">${esc(msg)}</div></div>`;
+}
+
+async function analyse({ blob, dataUrl }) {
+  const sensor = sensorSnapshot();
+  showPreviewLoading(dataUrl);
+  try {
+    const fd = new FormData();
+    fd.append("image", blob, "capture.jpg");
+    if (sensor) fd.append("sensor", JSON.stringify(sensor));
+    const res = await fetch("/api/predict", { method:"POST", body:fd });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || res.statusText);
+    showResult({ img: dataUrl, result: out, sensor: out.sensor || sensor, t: Date.now() });
+  } catch (err) {
+    showError(location.protocol === "file:" ? "The model server isn't running. Start python server.py and open http://localhost:5000" : err.message);
+  }
+}
+
+function showResult(s) {
+  current = s;
+  const r = s.result, st = stateStyle(r.state);
+  const title = r.uncertain ? "Not sure" : `${st.word} ${r.fruit}`;
+  const sub = r.uncertain
+    ? `Best guess: ${r.guess_state} ${r.fruit} (${pct(r.confidence)}). Try a clearer photo.`
+    : `${pct(r.confidence)} confident · ${r.state === "Fresh" ? "good to eat" : "best to discard"}`;
+  $("verdict").className = `verdict ${st.cls}`;
+  $("verdict").innerHTML = `<div class="ico">${EMOJI[r.fruit] || st.icon}</div><div><div class="v-title">${esc(title)}</div><div class="v-sub">${esc(sub)}</div></div>`;
+
+  $("preds").innerHTML = r.scores.slice(0, 3).map(p =>
+    `<div class="pred"><span>${p.state} ${p.fruit}</span><div class="ptrack"><div class="pfill" style="width:${(p.p * 100).toFixed(1)}%"></div></div><span class="pv">${pct(p.p)}</span></div>`).join("");
+
+  const sn = s.sensor;
+  if (sn) {
+    const a = airStatus(sn.ppm);
+    $("prevSensor").innerHTML = `
+      <div><span>Air quality</span><b>${sn.ppm >= 0 ? Math.round(sn.ppm) : "–"} ppm</b><em class="badge" style="margin:4px 0 0;font-style:normal;display:flex"><i class="sw" style="background:${a.color}"></i>${a.icon} ${a.text}</em></div>
+      <div><span>MQ135</span><b>${(+sn.mq_v).toFixed(2)} V</b> · Rs ${(+sn.rs).toFixed(1)} kΩ</div>
+      <div><span>Sensor battery</span><b>${(+sn.bat_v).toFixed(2)} V</b> · ${sn.bat_pct}%</div>
+      <div><span>Captured</span><b>${fmtTime(s.t)}</b></div>`;
+  } else {
+    $("prevSensor").innerHTML = `<div><span>Air quality</span><b>No sensor data</b></div><div><span>Captured</span><b>${fmtTime(s.t)}</b></div>`;
+  }
+  $("prevTime").textContent = `${fmtTime(s.t)} · ${r.ms} ms`;
+  $("noteInput").value = "";
+  $("prevDetails").hidden = false;
+}
+
+$("retakeBtn").onclick = () => {
+  $("previewCard").hidden = true; current = null;
+  document.querySelector(".top").scrollIntoView({ behavior:"smooth" });
+};
+$("addBtn").onclick = () => {
+  if (!current) return;
+  samples.push({ ...current, note: $("noteInput").value.trim(), n: samples.length ? samples[samples.length - 1].n + 1 : 1 });
+  current = null;
+  $("previewCard").hidden = true;
+  renderSamples();
+  toast(`Sample #${samples[samples.length - 1].n} added`);
+};
+
+// ================= Samples =================
+function renderSamples() {
+  $("sampleCount").textContent = `(${samples.length})`;
+  $("samplesEmpty").hidden = samples.length > 0;
+  ["csvBtn", "clearBtn", "reportBtn"].forEach(id => $(id).disabled = samples.length === 0);
+  $("samples").innerHTML = samples.map((s, i) => {
+    const r = s.result, st = stateStyle(r.state);
+    const air = s.sensor ? `${Math.round(s.sensor.ppm)} ppm` : "no sensor";
+    return `<div class="sample">
+      <img src="${s.img}" alt="Sample ${s.n}">
+      <span class="s-num">#${s.n}</span>
+      <button class="s-del" data-del="${i}" aria-label="Remove sample ${s.n}">✕</button>
+      <div class="s-body">
+        <div class="s-title"><span class="sw" style="background:${st.hex}"></span>${st.icon} ${r.uncertain ? "Uncertain" : st.word} ${esc(r.fruit)}</div>
+        <div class="s-meta">${pct(r.confidence)} · ${air} · ${fmtTime(s.t)}</div>
+        ${s.note ? `<div class="s-meta">${esc(s.note)}</div>` : ""}
+      </div></div>`;
+  }).join("");
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { samples.splice(+b.dataset.del, 1); renderSamples(); });
+}
+$("clearBtn").onclick = () => { if (confirm("Remove all samples?")) { samples = []; renderSamples(); } };
+
+$("csvBtn").onclick = () => {
+  const head = ["sample", "time", "fruit", "freshness", "confidence", "air_ppm", "air_status", "mq135_v", "rs_kohm", "sensor_battery_v", "note"];
+  const rows = samples.map(s => {
+    const r = s.result, sn = s.sensor;
+    return [s.n, new Date(s.t).toISOString(), r.fruit, r.state, r.confidence.toFixed(4),
+      sn ? Math.round(sn.ppm) : "", sn ? airStatus(sn.ppm).text : "", sn ? (+sn.mq_v).toFixed(3) : "", sn ? (+sn.rs).toFixed(2) : "",
+      sn ? (+sn.bat_v).toFixed(2) : "", `"${(s.note || "").replace(/"/g, '""')}"`].join(",");
+  });
+  download(`fruit_samples_${stamp()}.csv`, head.join(",") + "\n" + rows.join("\n"), "text/csv");
+};
+const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "").replace(/^(\d{8})/, "$1-");
+function download(name, content, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// ================= Final report =================
+let reportId = "";
+function buildReport() {
+  const n = samples.length;
+  const fresh = samples.filter(s => s.result.state === "Fresh").length;
+  const rotten = samples.filter(s => s.result.state === "Rotten").length;
+  const unsure = n - fresh - rotten;
+  const classified = fresh + rotten;
+  const rottenShare = classified ? rotten / classified : 0;
+
+  let rec;
+  if (!classified) rec = { cls:"none", icon:"?", title:"Insufficient data", text:"No sample could be classified with confidence. Re-take clearer photos." };
+  else if (rottenShare > 0.2) rec = { cls:"reject", icon:"✕", title:"Reject batch", text:`${rotten} of ${classified} classified samples (${Math.round(rottenShare * 100)}%) are rotten.` };
+  else if (rotten > 0 || unsure > 0) rec = { cls:"review", icon:"!", title:"Review batch", text: rotten ? `${rotten} rotten sample${rotten > 1 ? "s" : ""} found. Remove affected fruit and re-check.` : `${unsure} sample${unsure > 1 ? "s" : ""} could not be classified with confidence. Inspect manually.` };
+  else rec = { cls:"accept", icon:"✓", title:"Accept batch", text:`All ${fresh} samples are fresh.` };
+
+  // Per-fruit breakdown
+  const byFruit = {};
+  samples.forEach(s => {
+    const f = s.result.fruit;
+    byFruit[f] ??= { n:0, fresh:0, rotten:0, unsure:0, conf:0 };
+    const b = byFruit[f]; b.n++; b.conf += s.result.confidence;
+    if (s.result.state === "Fresh") b.fresh++; else if (s.result.state === "Rotten") b.rotten++; else b.unsure++;
+  });
+
+  // Conditions
+  const withAir = samples.filter(s => s.sensor && s.sensor.ppm >= 0);
+  const ppms = withAir.map(s => +s.sensor.ppm);
+  const avgPpm = ppms.length ? ppms.reduce((a, b) => a + b, 0) / ppms.length : null;
+  const avgAir = airStatus(avgPpm);
+
+  const times = samples.map(s => s.t);
+  const first = Math.min(...times), last = Math.max(...times);
+  const tag = (hex, txt) => `<span class="tag"><i style="background:${hex}"></i>${txt}</span>`;
+  const batch = esc($("rBatch").value) || "—", insp = esc($("rInspector").value) || "—", loc = esc($("rLocation").value) || "—";
+
+  return `
+  <div class="r-head">
+    <div><h1>Fruit Freshness Analysis Report</h1><div class="r-sub">Image-based freshness inspection with environmental monitoring</div></div>
+    <div class="r-id">Report no.<br><b>${reportId}</b><br>${fmtDateTime(Date.now())}</div>
+  </div>
+  <div class="meta">
+    <div><span>Batch / lot</span>${batch}</div>
+    <div><span>Inspected by</span>${insp}</div>
+    <div><span>Location</span>${loc}</div>
+    <div><span>Samples analysed</span>${n}</div>
+    <div><span>Inspection window</span>${fmtTime(first)} – ${fmtTime(last)}</div>
+    <div><span>Date</span>${new Date(first).toLocaleDateString([], { dateStyle:"medium" })}</div>
+  </div>
+
+  <h2>Summary</h2>
+  <div class="rec ${rec.cls}"><div class="ri">${rec.icon}</div><div><b>${rec.title}</b>${rec.text}</div></div>
+  <div class="stats">
+    <div class="stat"><span>Total samples</span><b>${n}</b></div>
+    <div class="stat"><span>Fresh</span><b>${fresh}</b> ${n ? `(${Math.round(fresh / n * 100)}%)` : ""}</div>
+    <div class="stat"><span>Rotten</span><b>${rotten}</b> ${n ? `(${Math.round(rotten / n * 100)}%)` : ""}</div>
+    <div class="stat"><span>Uncertain</span><b>${unsure}</b></div>
+  </div>
+
+  <h2>Results by fruit</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Fruit</th><th>Samples</th><th>Fresh</th><th>Rotten</th><th>Uncertain</th><th>Avg. confidence</th></tr></thead>
+    <tbody>${Object.entries(byFruit).map(([f, b]) => `<tr><td>${EMOJI[f] || ""} ${esc(f)}</td><td>${b.n}</td><td>${b.fresh}</td><td>${b.rotten}</td><td>${b.unsure}</td><td>${pct(b.conf / b.n)}</td></tr>`).join("")}</tbody>
+  </table></div>
+
+  <h2>Storage conditions</h2>
+  <div class="stats">
+    <div class="stat"><span>Avg. air quality</span><b>${avgPpm != null ? Math.round(avgPpm) : "—"}</b> ppm</div>
+    <div class="stat"><span>Range</span><b style="font-size:16px">${ppms.length ? `${Math.round(Math.min(...ppms))}–${Math.round(Math.max(...ppms))}` : "—"}</b> ppm</div>
+    <div class="stat"><span>Air status</span><b style="font-size:16px">${avgPpm != null ? tag(avgAir.hex, avgAir.icon + " " + avgAir.text) : "—"}</b></div>
+    <div class="stat"><span>Readings</span><b>${ppms.length}</b> of ${n}</div>
+  </div>
+
+  <h2>Sample details</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>#</th><th>Time</th><th>Fruit</th><th>Freshness</th><th>Confidence</th><th>Air (ppm)</th><th>Air status</th></tr></thead>
+    <tbody>${samples.map(s => {
+      const r = s.result, st = stateStyle(r.state), sn = s.sensor, a = airStatus(sn ? sn.ppm : null);
+      return `<tr><td>${s.n}</td><td>${fmtTime(s.t)}</td><td>${esc(r.fruit)}</td><td>${tag(st.hex, st.icon + " " + st.word)}</td><td>${pct(r.confidence)}</td>
+        <td>${sn ? Math.round(sn.ppm) : "—"}</td><td>${sn ? tag(a.hex, a.text) : "—"}</td></tr>`;
+    }).join("")}</tbody>
+  </table></div>
+
+  <h2>Photos</h2>
+  <div class="gallery">${samples.map(s => {
+    const r = s.result, st = stateStyle(r.state);
+    return `<div class="g-item"><img src="${s.img}" alt="Sample ${s.n}"><div class="g-body">
+      <b>#${s.n} · ${tag(st.hex, st.word + " " + esc(r.fruit))}</b><br>
+      <span class="n">${pct(r.confidence)} · ${s.sensor ? Math.round(s.sensor.ppm) + " ppm" : "no air reading"} · ${fmtTime(s.t)}</span>
+      ${s.note ? `<br><span class="n">${esc(s.note)}</span>` : ""}</div></div>`;
+  }).join("")}</div>
+
+  <div class="sign"><div>Inspected by</div><div>Approved by</div></div>
+  <div class="foot">
+    <span>Batch rule: Accept = no rotten or uncertain samples · Review = rotten ≤ 20% or any uncertain · Reject = rotten &gt; 20%. Results below ${Math.round((serverInfo?.min_conf ?? 0.6) * 100)}% confidence are marked uncertain.</span>
+    <span>Report ${reportId}</span>
+  </div>`;
+}
+function renderReport() { $("report").innerHTML = buildReport(); }
+
+$("reportBtn").onclick = () => {
+  reportId = `FFR-${stamp()}`;
+  renderReport();
+  $("reportView").hidden = false;
+  document.body.style.overflow = "hidden";
+  $("reportView").scrollTop = 0;
+};
+["rBatch", "rInspector", "rLocation"].forEach(id => $(id).addEventListener("input", renderReport));
+$("backBtn").onclick = () => { $("reportView").hidden = true; document.body.style.overflow = ""; };
+$("printBtn").onclick = () => window.print();
+$("saveHtmlBtn").onclick = () => {
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fruit Freshness Report ${reportId}</title><style>body{margin:0;padding:24px 12px;background:#e9e9e6}${$("reportCss").textContent}
+@media print{body{background:#fff;padding:0}.report{box-shadow:none;max-width:none}}</style></head>
+<body><article class="report">${$("report").innerHTML}</article></body></html>`;
+  download(`${reportId}.html`, html, "text/html");
+};
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("reportView").hidden) $("backBtn").click(); });
+
+// ================= Charts (plain SVG, works offline) =================
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function niceTicks(min, max, count = 4) {
+  if (min === max) { min -= 1; max += 1; }
+  const raw = (max - min) / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step, ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(+v.toFixed(6));
+  return { lo, hi, ticks, step };
+}
+function drawChart(host, key, colorVar, fmt, unit) {
+  host.innerHTML = "";
+  const now = Date.now(), pts = sensorHistory.filter(r => r.t >= now - WINDOW_MS && r[key] >= 0);
+  const W = host.clientWidth, H = host.clientHeight, m = { l:44, r:14, t:10, b:24 };
+  const svg = el("svg", { viewBox:`0 0 ${W} ${H}`, role:"img", "aria-label":`${key} over the last 5 minutes` }, host);
+  const tip = document.createElement("div"); tip.className = "tip"; host.appendChild(tip);
+  if (pts.length < 2) { const e = document.createElement("div"); e.className = "c-empty"; e.textContent = "Waiting for sensor data…"; host.appendChild(e); return; }
+  const vals = pts.map(p => p[key]);
+  const pad = (Math.max(...vals) - Math.min(...vals)) * 0.1 || Math.abs(vals[0]) * 0.02 || 1;
+  const { lo, hi, ticks, step } = niceTicks(Math.min(...vals) - pad, Math.max(...vals) + pad);
+  const t0 = now - WINDOW_MS, x = t => m.l + (t - t0) / WINDOW_MS * (W - m.l - m.r), y = v => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+  const dec = step < 1 ? (step < 0.1 ? 2 : 1) : 0;
+  for (const v of ticks) {
+    el("line", { x1:m.l, x2:W - m.r, y1:y(v), y2:y(v), stroke:"var(--grid)", "stroke-width":1 }, svg);
+    el("text", { x:m.l - 8, y:y(v) + 4, "text-anchor":"end", "font-size":11, fill:"var(--text-muted)" }, svg).textContent = v.toFixed(dec);
+  }
+  [0, 2.5, 5].forEach(mn => el("text", { x:x(t0 + mn * 60000), y:H - 5, "text-anchor": mn === 0 ? "start" : mn === 5 ? "end" : "middle", "font-size":11, fill:"var(--text-muted)" }, svg).textContent = mn === 5 ? "now" : `-${5 - mn} min`);
+  el("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)},${y(p[key]).toFixed(1)}`).join(""), fill:"none", stroke:`var(${colorVar})`, "stroke-width":2, "stroke-linejoin":"round", "stroke-linecap":"round" }, svg);
+  const last = pts[pts.length - 1];
+  el("circle", { cx:x(last.t), cy:y(last[key]), r:5, fill:`var(${colorVar})`, stroke:"var(--surface-1)", "stroke-width":2 }, svg);
+  const cross = el("line", { y1:m.t, y2:H - m.b, stroke:"var(--text-muted)", "stroke-width":1, "stroke-dasharray":"3 3", visibility:"hidden" }, svg);
+  const hDot = el("circle", { r:5, fill:`var(${colorVar})`, stroke:"var(--surface-1)", "stroke-width":2, visibility:"hidden" }, svg);
+  const hit = el("rect", { x:m.l, y:0, width:W - m.l - m.r, height:H, fill:"transparent" }, svg);
+  const move = ev => {
+    const rect = svg.getBoundingClientRect(), px = (ev.clientX - rect.left) * (W / rect.width);
+    let best = pts[0], bd = Infinity;
+    for (const p of pts) { const d = Math.abs(x(p.t) - px); if (d < bd) { bd = d; best = p; } }
+    const cx = x(best.t), cy = y(best[key]);
+    cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+    hDot.setAttribute("cx", cx); hDot.setAttribute("cy", cy); hDot.setAttribute("visibility", "visible");
+    tip.innerHTML = `<b>${fmt(best[key])}</b> ${unit}<br><span class="t">${fmtTime(best.t)}</span>`;
+    tip.style.display = "block";
+    const tw = tip.offsetWidth;
+    tip.style.left = (cx + 12 + tw > W ? cx - 12 - tw : cx + 12) + "px";
+    tip.style.top = Math.max(0, cy - 44) + "px";
+  };
+  hit.addEventListener("pointermove", move); hit.addEventListener("pointerdown", move);
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hDot.setAttribute("visibility", "hidden"); tip.style.display = "none"; });
+}
+function drawCharts() {
+  drawChart($("airChart"), "ppm", "--series-air", v => Math.round(v), "ppm");
+  drawChart($("batChart"), "bat_v", "--series-bat", v => v.toFixed(2), "V");
+}
+new ResizeObserver(drawCharts).observe(document.querySelector(".charts"));
+
+// ================= Start =================
+renderSamples();
+drawCharts();
+checkServer();
+</script>
+</body>
+</html>
