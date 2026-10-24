@@ -7,14 +7,6 @@
 |  _| |  _ <| |_| || |  | |   |  _| |  _ <| |___ ___) |  _  | |\  | |___ ___) |__) |
 |_|   |_| \_\\___/|___| |_|   |_|   |_| \_\_____|____/|_| |_|_| \_|_____|____/____/
 
-
-              .:'
-          __ :'__            >>  AI  +  GAS SENSING  <<
-       .'`__`-'__``.         MobileNetV2 | TFLite | ESP32 | MQ-135
-      :__________.-'         Raspberry Pi 5 edge inference
-      :_________:
-       :_________`-;
-        `.__.-.__.'
 ```
 
 # Fruit Freshness Detection using AI and Gas Sensing
