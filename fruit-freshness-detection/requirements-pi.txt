@@ -1,4 +1,0 @@
-# Raspberry Pi 5 install:  pip install -r requirements-pi.txt
--r requirements.txt
-ai-edge-litert      # TFLite runtime (if it fails: pip install tflite-runtime)
-bleak               # Bluetooth LE client, only needed for --ble and scripts/pi_receiver.py
